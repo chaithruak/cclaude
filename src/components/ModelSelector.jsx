@@ -10,14 +10,19 @@ function resolveBase(endpoint) {
 
 const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'lm_studio', 'llamacpp', 'llama.cpp', 'llama_cpp']
 
-function isLocal(id) {
-  const first = id.split('/')[0].toLowerCase()
+// Strip fcc-server routing prefix for DISPLAY only — never for API calls
+function displayName(rawId) {
+  return rawId.replace(/^claude-[^/]+\//, '').replace(/^anthropic\//, '')
+}
+
+function isLocal(rawId) {
+  const first = displayName(rawId).split('/')[0].toLowerCase()
   return LOCAL_PROVIDERS.includes(first)
 }
 
 export default function ModelSelector() {
   const store = useAppStore()
-  const [models, setModels] = useState([])
+  const [models, setModels] = useState([])   // stores RAW IDs from API (for API calls)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [connected, setConnected] = useState(false)
@@ -33,9 +38,10 @@ export default function ModelSelector() {
         })
         if (res.ok) {
           const data = await res.json()
+          // Keep RAW IDs — sort by display name
           const ids = (data.data ?? data.models ?? [])
-            .map(m => (m.id ?? m).replace(/^claude-[^/]+\//, '').replace(/^anthropic\//, ''))
-            .sort((a, b) => a.localeCompare(b))
+            .map(m => m.id ?? m)
+            .sort((a, b) => displayName(a).localeCompare(displayName(b)))
           setModels(ids)
           setConnected(true)
           if (!store.settings.model && ids.length) {
@@ -64,22 +70,19 @@ export default function ModelSelector() {
     else setQuery('')
   }, [open])
 
-  const current = store.settings.model
-  const filtered = query ? models.filter(id => id.toLowerCase().includes(query.toLowerCase())) : models
+  const current = store.settings.model  // RAW ID used for API calls
+  const filtered = query
+    ? models.filter(id => displayName(id).toLowerCase().includes(query.toLowerCase()))
+    : models
 
-  // Colors
   const CLOUD_COLOR = '#6b9cf7'
   const LOCAL_COLOR = '#c98a4b'
   const ACTIVE_COLOR = '#4caf81'
 
-  function modelColor(id) {
-    return isLocal(id) ? LOCAL_COLOR : CLOUD_COLOR
-  }
-
   return (
     <div ref={ref} style={{ position: 'relative' }}>
 
-      {/* Trigger button */}
+      {/* Trigger */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -91,7 +94,7 @@ export default function ModelSelector() {
           transition: 'background 0.1s, border-color 0.15s',
         }}
       >
-        {/* Server status indicator */}
+        {/* Server status dot */}
         <span style={{
           width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
           background: connected ? '#4caf81' : '#e05c5c',
@@ -104,16 +107,11 @@ export default function ModelSelector() {
         {current && (
           <>
             <span style={{ color: 'var(--border)', flexShrink: 0 }}>·</span>
-            {/* Cloud/Local icon */}
-            <span style={{ color: modelColor(current), display: 'flex', flexShrink: 0 }}>
+            <span style={{ color: isLocal(current) ? LOCAL_COLOR : CLOUD_COLOR, display: 'flex', flexShrink: 0 }}>
               {isLocal(current) ? <Monitor size={12} /> : <Cloud size={12} />}
             </span>
-            {/* Active model name in green */}
-            <span style={{
-              fontWeight: 600, color: ACTIVE_COLOR,
-              maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {current}
+            <span style={{ fontWeight: 600, color: ACTIVE_COLOR, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {displayName(current)}
             </span>
           </>
         )}
@@ -132,22 +130,19 @@ export default function ModelSelector() {
           maxHeight: 480, overflow: 'hidden',
         }}>
 
-          {/* Search */}
+          {/* Header */}
           <div style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>
                 {filtered.length} of {models.length} models
               </span>
-              {/* Legend */}
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: CLOUD_COLOR }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: CLOUD_COLOR }}>
                 <Cloud size={10} /> Cloud
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: LOCAL_COLOR }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: LOCAL_COLOR }}>
                 <Monitor size={10} /> Local
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: ACTIVE_COLOR }}>
-                ● Active
-              </span>
+              <span style={{ fontSize: 10, color: ACTIVE_COLOR }}>● Active</span>
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 7,
@@ -176,7 +171,7 @@ export default function ModelSelector() {
             </div>
           </div>
 
-          {/* List */}
+          {/* List — shows display names, stores raw IDs */}
           <div style={{ overflowY: 'auto', padding: 6, flex: 1, minHeight: 0 }}>
             {models.length === 0 && (
               <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
@@ -188,15 +183,15 @@ export default function ModelSelector() {
                 No models match "<strong>{query}</strong>"
               </div>
             )}
-            {filtered.map((id, i) => {
-              const isActive = store.settings.model === id
-              const local = isLocal(id)
+            {filtered.map((rawId, i) => {
+              const isActive = store.settings.model === rawId
+              const local = isLocal(rawId)
               const typeColor = local ? LOCAL_COLOR : CLOUD_COLOR
               return (
                 <button
-                  key={`${id}-${i}`}
-                  title={id}
-                  onClick={() => { store.updateSettings({ model: id }); setOpen(false); setQuery('') }}
+                  key={`${rawId}-${i}`}
+                  title={rawId}  // hover shows raw ID
+                  onClick={() => { store.updateSettings({ model: rawId }); setOpen(false); setQuery('') }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     width: '100%', textAlign: 'left',
@@ -209,13 +204,11 @@ export default function ModelSelector() {
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                 >
-                  {/* Cloud / Local icon in provider colour */}
                   <span style={{ color: typeColor, display: 'flex', flexShrink: 0 }}>
                     {local ? <Monitor size={13} /> : <Cloud size={13} />}
                   </span>
-                  {/* Full model name — no truncation */}
                   <span style={{ flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }}>
-                    {id}
+                    {displayName(rawId)}
                   </span>
                   {isActive && (
                     <span style={{ fontSize: 9, color: ACTIVE_COLOR, fontWeight: 800, flexShrink: 0, letterSpacing: '0.05em' }}>
@@ -228,7 +221,7 @@ export default function ModelSelector() {
           </div>
 
           <div style={{ padding: '5px 10px 7px', borderTop: '1px solid var(--border-subtle)', fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-            ↵ select · Esc close
+            ↵ select · Esc close · hover for full ID
           </div>
         </div>
       )}
