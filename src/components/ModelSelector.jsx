@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { ChevronDown, Cpu, Search, X } from 'lucide-react'
+import { ChevronDown, Cpu, Search, X, Cloud, Monitor } from 'lucide-react'
 import { useAppStore } from '../App.jsx'
 
 function resolveBase(endpoint) {
@@ -8,11 +8,19 @@ function resolveBase(endpoint) {
   return ''
 }
 
+const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'lm_studio', 'llamacpp', 'llama.cpp', 'llama_cpp']
+
+function isLocal(id) {
+  const first = id.split('/')[0].toLowerCase()
+  return LOCAL_PROVIDERS.includes(first)
+}
+
 export default function ModelSelector() {
   const store = useAppStore()
   const [models, setModels] = useState([])
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [connected, setConnected] = useState(false)
   const ref = useRef(null)
   const searchRef = useRef(null)
 
@@ -25,13 +33,20 @@ export default function ModelSelector() {
         })
         if (res.ok) {
           const data = await res.json()
-          const ids = (data.data ?? data.models ?? []).map(m => m.id ?? m)
+          const ids = (data.data ?? data.models ?? [])
+            .map(m => (m.id ?? m).replace(/^claude-[^/]+\//, '').replace(/^anthropic\//, ''))
+            .sort((a, b) => a.localeCompare(b))
           setModels(ids)
+          setConnected(true)
           if (!store.settings.model && ids.length) {
             store.updateSettings({ model: ids[0] })
           }
+        } else {
+          setConnected(false)
         }
-      } catch {}
+      } catch {
+        setConnected(false)
+      }
     }
     fetchModels()
   }, [store.settings.endpoint, store.settings.authToken])
@@ -52,12 +67,23 @@ export default function ModelSelector() {
   const current = store.settings.model
   const filtered = query ? models.filter(id => id.toLowerCase().includes(query.toLowerCase())) : models
 
+  // Colors
+  const CLOUD_COLOR = '#6b9cf7'
+  const LOCAL_COLOR = '#c98a4b'
+  const ACTIVE_COLOR = '#4caf81'
+
+  function modelColor(id) {
+    return isLocal(id) ? LOCAL_COLOR : CLOUD_COLOR
+  }
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
+
+      {/* Trigger button */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 6,
+          display: 'flex', alignItems: 'center', gap: 7,
           padding: '6px 12px', borderRadius: 8,
           background: open ? 'var(--bg-surface-2)' : 'var(--bg-surface)',
           border: `1px solid ${open ? 'var(--accent)' : 'var(--border)'}`,
@@ -65,29 +91,64 @@ export default function ModelSelector() {
           transition: 'background 0.1s, border-color 0.15s',
         }}
       >
-        <Cpu size={13} />
-        <span style={{ color: 'var(--text-muted)' }}>Select Model</span>
+        {/* Server status indicator */}
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          background: connected ? '#4caf81' : '#e05c5c',
+          boxShadow: connected ? '0 0 5px #4caf81' : '0 0 5px #e05c5c',
+        }} title={connected ? 'Server connected' : 'Server not reachable'} />
+
+        <Cpu size={13} style={{ flexShrink: 0 }} />
+        <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Select Model</span>
+
         {current && (
           <>
-            <span style={{ color: 'var(--border)' }}>·</span>
-            <span style={{ fontWeight: 600, color: 'var(--accent)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--border)', flexShrink: 0 }}>·</span>
+            {/* Cloud/Local icon */}
+            <span style={{ color: modelColor(current), display: 'flex', flexShrink: 0 }}>
+              {isLocal(current) ? <Monitor size={12} /> : <Cloud size={12} />}
+            </span>
+            {/* Active model name in green */}
+            <span style={{
+              fontWeight: 600, color: ACTIVE_COLOR,
+              maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
               {current}
             </span>
           </>
         )}
-        <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+
+        <ChevronDown size={12} style={{ flexShrink: 0, marginLeft: 2, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
       </button>
 
+      {/* Dropdown */}
       {open && (
         <div style={{
           position: 'absolute', bottom: '100%', right: 0, marginBottom: 6,
           background: 'var(--bg-surface)', border: '1px solid var(--border)',
           borderRadius: 10, boxShadow: '0 -8px 24px rgba(0,0,0,0.5)',
-          zIndex: 100, width: 340,
+          zIndex: 100, width: 480,
           display: 'flex', flexDirection: 'column',
-          maxHeight: 400, overflow: 'hidden',
+          maxHeight: 480, overflow: 'hidden',
         }}>
+
+          {/* Search */}
           <div style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>
+                {filtered.length} of {models.length} models
+              </span>
+              {/* Legend */}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: CLOUD_COLOR }}>
+                <Cloud size={10} /> Cloud
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: LOCAL_COLOR }}>
+                <Monitor size={10} /> Local
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: ACTIVE_COLOR }}>
+                ● Active
+              </span>
+            </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 7,
               background: 'var(--bg-surface-2)', border: '1px solid var(--border)',
@@ -115,6 +176,7 @@ export default function ModelSelector() {
             </div>
           </div>
 
+          {/* List */}
           <div style={{ overflowY: 'auto', padding: 6, flex: 1, minHeight: 0 }}>
             {models.length === 0 && (
               <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
@@ -128,30 +190,45 @@ export default function ModelSelector() {
             )}
             {filtered.map((id, i) => {
               const isActive = store.settings.model === id
+              const local = isLocal(id)
+              const typeColor = local ? LOCAL_COLOR : CLOUD_COLOR
               return (
                 <button
                   key={`${id}-${i}`}
                   title={id}
                   onClick={() => { store.updateSettings({ model: id }); setOpen(false); setQuery('') }}
                   style={{
-                    display: 'block', width: '100%', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    width: '100%', textAlign: 'left',
                     padding: '8px 12px', borderRadius: 7, fontSize: 12, marginBottom: 1,
-                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-                    background: isActive ? 'var(--accent-dim)' : 'transparent',
+                    color: isActive ? ACTIVE_COLOR : 'var(--text-secondary)',
+                    background: isActive ? 'rgba(76,175,129,0.1)' : 'transparent',
+                    border: `1px solid ${isActive ? 'rgba(76,175,129,0.3)' : 'transparent'}`,
                     fontWeight: isActive ? 600 : 400,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                 >
-                  {id}
+                  {/* Cloud / Local icon in provider colour */}
+                  <span style={{ color: typeColor, display: 'flex', flexShrink: 0 }}>
+                    {local ? <Monitor size={13} /> : <Cloud size={13} />}
+                  </span>
+                  {/* Full model name — no truncation */}
+                  <span style={{ flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }}>
+                    {id}
+                  </span>
+                  {isActive && (
+                    <span style={{ fontSize: 9, color: ACTIVE_COLOR, fontWeight: 800, flexShrink: 0, letterSpacing: '0.05em' }}>
+                      ACTIVE
+                    </span>
+                  )}
                 </button>
               )
             })}
           </div>
 
           <div style={{ padding: '5px 10px 7px', borderTop: '1px solid var(--border-subtle)', fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-            {filtered.length} of {models.length} models · ↵ select · Esc close
+            ↵ select · Esc close
           </div>
         </div>
       )}
