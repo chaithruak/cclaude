@@ -1,0 +1,62 @@
+{
+  "name": "cclaude",
+  "version": "1.0.0",
+  "description": "CClaude — Local AI Chat UI by Chaithrodaya Sukruth",
+  "author": {
+    "name": "Chaithrodaya Sukruth",
+    "email": "chaithru@gmail.com"
+  },
+  "main": "electron/main.cjs",
+  "homepage": "./",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -n VITE,ELECTRON -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "cross-env ELECTRON_BUILD=1 vite build && electron-builder --win",
+    "electron:build:mac": "cross-env ELECTRON_BUILD=1 vite build && electron-builder --mac",
+    "electron:build:linux": "cross-env ELECTRON_BUILD=1 vite build && electron-builder --linux"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.383.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0",
+    "cross-env": "^7.0.3"
+  },
+  "build": {
+    "appId": "com.chaithrodaya.cclaude",
+    "productName": "CClaude",
+    "copyright": "© 2025 Chaithrodaya Sukruth",
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "electron/**/*", "node_modules/**/*", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "electron/assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "electron/assets/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CClaude"
+    }
+  }
+}

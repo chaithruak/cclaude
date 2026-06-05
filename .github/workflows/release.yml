@@ -1,0 +1,78 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'           # triggers on any tag like v1.0.0, v1.2.3
+  workflow_dispatch:   # also allows manual trigger from GitHub UI
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run electron:build
+        env:
+          ELECTRON_BUILD: '1'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows installer to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+          generate_release_notes: true
+          name: CClaude ${{ github.ref_name }}
+          body: |
+            ## CClaude ${{ github.ref_name }}
+
+            ### Installation
+            1. Download **CClaude-Setup-*.exe** below
+            2. Run the installer
+            3. Make sure `fcc-server` is running before launching CClaude
+
+            ### Requirements
+            - [free-claude-code](https://github.com/Alishahryar1/free-claude-code) running on `localhost:8082`
+
+            ---
+            *Created by Chaithrodaya Sukruth · chaithru@gmail.com*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS dmg
+        run: npm run electron:build:mac
+        env:
+          ELECTRON_BUILD: '1'
+
+      - name: Upload macOS dmg to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
